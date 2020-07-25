@@ -1,57 +1,58 @@
-const express = require('express')
-const app = express()
-const bodyParser = require('body-parser')
-const mongoose = require('mongoose')
-
-mongoose.connect("mongodb://localhost:27017/yelpchamp", { 
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-})
-.then(() => console.log('connected to db!'))
-.catch(error => console.log(error.message))
-app.use(bodyParser.urlencoded({extended: true}))
-app.set("view engine", "ejs")
-
-let campgroundSchema = new mongoose.Schema({
-    name: String,
-    image: String,
-    description: String
-})
-
-let Campground = mongoose.model("Campground", campgroundSchema)
-
-
-app.get("/", (req, res) => {
-    res.render("landing")
-})
-
-app.get("/campgrounds", (req, res) => {
-    Campground.find({}, function(err, allCampgrounds){
-        res.render("index", {campgrounds: allCampgrounds})
-    })
+var express     = require("express"),
+    app         = express(),
+    bodyParser  = require("body-parser"),
+    mongoose    = require("mongoose"),
+    passport    = require("passport"),
+    cookieParser = require("cookie-parser"),
+    LocalStrategy = require("passport-local"),
+    flash        = require("connect-flash"),
+    Campground  = require("./models/campground"),
+    Comment     = require("./models/comment"),
+    User        = require("./models/user"),
+    session = require("express-session"),
+    seedDB      = require("./seeds"),
+    methodOverride = require("method-override");
     
-})
-
-app.post("/campgrounds", (req, res) => {
-    let name = req.body.name
-    let image = req.body.image
-    let description = req.body.description
-    let newCampground = {name: name, image: image, description: description}
-    Campground.create(newCampground, function(err, newlyCreated){
-        res.redirect("/campgrounds")
-    })
-})
-
-app.get("/campgrounds/new", (req, res) => {
-    res.render("new.ejs")
-})
-
-app.get("/campgrounds/:id", (req, res) => {
-    Campground.findById(req.params.id, function(err, foundCampground) {
- res.render("show", {campground: foundCampground})
-})
-    })
+//requiring routes
+var commentRoutes    = require("./routes/comments"),
+    campgroundRoutes = require("./routes/campgrounds"),
+    indexRoutes      = require("./routes/index")
     
-   
+mongoose.connect("mongodb://localhost: 27017/yelpcamp");
+app.use(bodyParser.urlencoded({extended: true}));
+app.set("view engine", "ejs");
+app.use(express.static(__dirname + "/public"));
+app.use(methodOverride('_method'));
+app.use(cookieParser('secret'));
 
-app.listen(27017)
+// seedDB(); //seed the database
+
+// PASSPORT CONFIGURATION
+app.use(require("express-session")({
+    secret: "Once again Rusty wins cutest dog!",
+    resave: false,
+    saveUninitialized: false
+}));
+
+app.use(flash());
+app.use(passport.initialize());
+app.use(passport.session());
+passport.use(new LocalStrategy(User.authenticate()));
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
+app.use(function(req, res, next){
+   res.locals.currentUser = req.user;
+   res.locals.success = req.flash('success');
+   res.locals.error = req.flash('error');
+   next();
+});
+
+
+app.use("/", indexRoutes);
+app.use("/campgrounds", campgroundRoutes);
+app.use("/campgrounds/:id/comments", commentRoutes);
+
+app.listen(process.env.PORT || 27017, process.env.IP, function(){
+   console.log("The YelpCamp Server Has Started!");
+});
